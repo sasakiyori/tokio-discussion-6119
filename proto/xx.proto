@@ -1,0 +1,15 @@
+syntax = "proto3";
+
+package xx;
+
+message TailRequest {
+    string path = 1;
+}
+
+message TailResponse {
+    string data = 1;
+}
+
+service XXService {
+    rpc Tail(TailRequest) returns (stream TailResponse);
+}
