@@ -1,18 +1,39 @@
-use std::pin::Pin;
+use std::{
+    pin::Pin,
+    sync::{Arc, Mutex},
+    task::{Context, Poll},
+};
 
 use futures_core::Stream;
 use tokio::sync::mpsc::Receiver;
-use tokio_stream::wrappers::ReceiverStream;
 use tonic::{Request, Response, Status};
 
 use crate::proto::xx::{xx_service_server::XxService, TailRequest, TailResponse};
 
+struct TailStream {
+    inner: Arc<Mutex<Receiver<Result<TailResponse, Status>>>>,
+}
+
+impl Stream for TailStream {
+    type Item = Result<TailResponse, Status>;
+
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        self.inner.lock().unwrap().poll_recv(cx)
+    }
+}
+
+impl TailStream {
+    fn new(recv: Arc<Mutex<Receiver<Result<TailResponse, Status>>>>) -> Self {
+        Self { inner: recv }
+    }
+}
+
 pub struct XXService {
-    receiver: Receiver<Result<TailResponse, Status>>,
+    receiver: Arc<Mutex<Receiver<Result<TailResponse, Status>>>>,
 }
 
 impl XXService {
-    pub fn new(receiver: Receiver<Result<TailResponse, Status>>) -> Self {
+    pub fn new(receiver: Arc<Mutex<Receiver<Result<TailResponse, Status>>>>) -> Self {
         Self { receiver }
     }
 }
@@ -25,11 +46,8 @@ impl XxService for XXService {
         &self,
         request: Request<TailRequest>,
     ) -> Result<Response<Self::TailStream>, Status> {
-        // Error:
-        // cannot move out of `__self.receiver` which is behind a shared reference
-        // move occurs because `__self.receiver` has type `tokio::sync::mpsc::Receiver<Result<TailResponse, Status>>`,
-        // which does not implement the `Copy` trait
-        let reply_stream = ReceiverStream::new(self.receiver);
+        // success
+        let reply_stream = TailStream::new(self.receiver.clone());
         Ok(Response::new(Box::pin(reply_stream) as Self::TailStream))
     }
 }
