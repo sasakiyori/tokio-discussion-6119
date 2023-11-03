@@ -1,4 +1,4 @@
-use std::pin::Pin;
+use std::{pin::Pin, sync::Mutex};
 
 use futures_core::Stream;
 use tokio::sync::mpsc::Receiver;
@@ -8,12 +8,16 @@ use tonic::{Request, Response, Status};
 use crate::proto::xx::{xx_service_server::XxService, TailRequest, TailResponse};
 
 pub struct XXService {
-    receiver: Receiver<Result<TailResponse, Status>>,
+    receiver: Mutex<Option<Receiver<Result<TailResponse, Status>>>>,
 }
 
 impl XXService {
-    pub fn new(receiver: Receiver<Result<TailResponse, Status>>) -> Self {
+    pub fn new(receiver: Mutex<Option<Receiver<Result<TailResponse, Status>>>>) -> Self {
         Self { receiver }
+    }
+
+    fn take_receiver(&self) -> Option<Receiver<Result<TailResponse, Status>>> {
+        self.receiver.lock().unwrap().take()
     }
 }
 
@@ -25,11 +29,10 @@ impl XxService for XXService {
         &self,
         request: Request<TailRequest>,
     ) -> Result<Response<Self::TailStream>, Status> {
-        // Error:
-        // cannot move out of `__self.receiver` which is behind a shared reference
-        // move occurs because `__self.receiver` has type `tokio::sync::mpsc::Receiver<Result<TailResponse, Status>>`,
-        // which does not implement the `Copy` trait
-        let reply_stream = ReceiverStream::new(self.receiver);
+        // access control before take receiver
+        // ...
+
+        let reply_stream = ReceiverStream::new(self.take_receiver().unwrap());
         Ok(Response::new(Box::pin(reply_stream) as Self::TailStream))
     }
 }

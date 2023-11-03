@@ -1,6 +1,8 @@
 mod proto;
 mod xx_service;
 
+use std::sync::Mutex;
+
 use proto::xx::{xx_service_server::XxServiceServer, TailResponse};
 use tokio::sync::mpsc;
 use tonic::{transport::Server, Status};
@@ -14,7 +16,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     read_buffer(sender);
     // grpc server
     let addr = "0.0.0.0:50050".parse()?;
-    let xx_service = XXService::new(receiver);
+    let xx_service = XXService::new(Mutex::new(Some(receiver)));
     Server::builder()
         .add_service(XxServiceServer::new(xx_service))
         .serve(addr)
